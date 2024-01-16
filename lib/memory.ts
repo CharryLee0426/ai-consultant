@@ -34,10 +34,10 @@ export class MemoryManager {
   ) {
     const pineconeClient = <PineconeClient>this.vectorDBClient;
 
-    await this.vectorDBClient.init({
-      environment: process.env.PINECONE_ENVIRONMENT!,
-      apiKey: process.env.PINECONE_API_KEY!
-    });
+    // await this.vectorDBClient.init({
+    //   environment: process.env.PINECONE_ENVIRONMENT!,
+    //   apiKey: process.env.PINECONE_API_KEY!
+    // });
 
     const pineconeIndex = pineconeClient.Index(
       process.env.PINECONE_INDEX as string || ""
