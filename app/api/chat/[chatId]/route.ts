@@ -86,7 +86,7 @@ export async function POST(
             input: {
                 max_length: 2048,
             },
-            apiKey: process.env.REPLICATED_API_TOKEN,
+            apiKey: process.env.REPLICATED_API_KEY as string,
             callbackManager: CallbackManager.fromHandlers(handlers),
         })
 
