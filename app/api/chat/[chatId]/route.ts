@@ -1,4 +1,5 @@
 import { StreamingTextResponse, LangChainStream } from "ai";
+import { OpenAI } from "openai";
 import { auth, currentUser } from "@clerk/nextjs";
 import { Replicate } from "langchain/llms/replicate";
 import { CallbackManager } from "langchain/callbacks";
@@ -79,66 +80,63 @@ export async function POST(
             relevantHistory = similarDocs.map((doc) => doc.pageContent).join("\n")
         }
 
-        const { handlers } = LangChainStream()
-
-        const model = new Replicate({
-            model: "a16z-infra/llama-2-13b-chat:df7690f1994d94e96ad9d568eac121aecf50684a0b0963b25a41cc40061269e5",
-            input: {
-                max_length: 2048,
-            },
-            apiKey: process.env.REPLICATED_API_KEY as string,
-            callbackManager: CallbackManager.fromHandlers(handlers),
+        const openAI = new OpenAI({
+            apiKey: process.env.OPENAI_API_KEY as string,
         })
 
-        model.verbose = true
+        let helper = `
+            ONLY generate plain sentences without prefix of who is speaking. DO NOT use ${consultant.name}: prefix. 
+          
+            ${consultant.instructions}
+          
+            Below are relevant details about ${consultant.name}'s past and the conversation you are in.
+            ${relevantHistory}
+          
+          
+            ${recentChatHistory}\n${consultant.name}:
+            `
 
-        const resp = String(
-            await model
-              .call(
-                `
-              ONLY generate plain sentences without prefix of who is speaking. DO NOT use ${consultant.name}: prefix. 
-      
-              ${consultant.instructions}
-      
-              Below are relevant details about ${consultant.name}'s past and the conversation you are in.
-              ${relevantHistory}
-      
-      
-              ${recentChatHistory}\n${consultant.name}:`
-              )
-              .catch(console.error)
-          );
-      
-          const cleaned = resp.replaceAll(",", "");
-          const chunks = cleaned.split("\n");
-          const response = chunks[0];
-      
-          await memoryManager.writeToHistory("" + response.trim(), consultantKey);
-          var Readable = require("stream").Readable;
-      
-          let s = new Readable();
-          s.push(response);
-          s.push(null);
-          if (response !== undefined && response.length > 1) {
-            memoryManager.writeToHistory("" + response.trim(), consultantKey);
-      
+        const resp = await openAI.chat.completions.create({
+            messages: [
+                {role: "system", content: consultant.instructions},
+                {role: "system", content: consultant.seed},
+                {role: "system", content: helper},
+                {role: "user", content: prompt},
+            ],
+            model: "gpt-3.5-turbo"
+        })
+
+        const result = resp.choices[0].message.content
+
+        await memoryManager.writeToHistory("" + result!.trim(), consultantKey);
+
+        var Readable = require("stream").Readable;
+
+        let s = new Readable();
+
+        s.push(result);
+        s.push(null);
+
+        if (result !== undefined && result!.length > 1) {
+            memoryManager.writeToHistory("" + result!.trim(), consultantKey);
+
             await prismadb.consultant.update({
-              where: {
-                id: params.chatId
-              },
-              data: {
-                messages: {
-                  create: {
-                    content: response.trim(),
-                    role: "system",
-                    userId: user.id,
-                  },
+                where: {
+                    id: params.chatId
                 },
-              }
+                data: {
+                    messages: {
+                        create: {
+                            content: result!.trim(),
+                            role: "system",
+                            userId: user.id,
+                        },
+                    },
+                }
             });
-          }
+        }
       
-          return new StreamingTextResponse(s);
+        return new StreamingTextResponse(s);
     } catch(e) {
         console.log("[CHAT_POST]", e)
         return new NextResponse("Internal Server Error", { status: 500 })
