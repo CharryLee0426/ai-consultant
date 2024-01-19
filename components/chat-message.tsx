@@ -7,7 +7,7 @@ import { BeatLoader } from "react-spinners";
 import { BotAvatar } from "./bot-avatar";
 import { UserAvatar } from "./user-avatar";
 import { Button } from "./ui/button";
-import { Copy } from "lucide-react";
+import { Copy, Speech } from "lucide-react";
 
 export interface ChatMessageProps {
     role: "user" | "system"
@@ -36,6 +36,37 @@ export const ChatMessage = ({
         })
     }
 
+    const onPlay = async () => {
+        if (!content) {
+            return
+        }
+
+        try {
+            // fetch is better way because openai returns Response by default
+            // no need to convert AxiosResponse to Response if using fetch
+            const response = await fetch(`/api/chat/audio/${content}`)
+
+            const audioContext = new window.AudioContext()
+
+            const buffer = response.arrayBuffer()
+    
+            audioContext.decodeAudioData(await buffer, function (buffer) {
+                    const source = audioContext.createBufferSource()
+                    source.buffer = buffer
+                    source.connect(audioContext.destination)
+                    source.start(0)
+            })
+
+            console.log("[TTS]", response)
+        } catch (e) {
+            console.log("[TTS]", e)
+            toast({
+                description: "Something went wrong",
+                variant: "destructive"
+            })
+        }
+    }
+
     return (
         <div className={cn(
             "group flex items-start gap-x-3 py-4 w-full",
@@ -48,12 +79,26 @@ export const ChatMessage = ({
             </div>
             {role === "user" && <UserAvatar />}
             {role !== "user" && !isLoading && (
-                <Button onClick={onCopy}
-                className="opacity-0 group-hover:opacity-100 transition"
-                size="icon"
-                variant="ghost">
-                    <Copy className="w-4 h-4"/>
-                </Button>
+                <div className="group flex-1">
+                    <div>
+                        <Button onClick={onCopy}
+                            className="opacity-0 group-hover:opacity-100 transition"
+                            size="icon"
+                            variant="ghost">
+                            <Copy className="w-4 h-4"/>
+                        </Button>
+                    </div>
+
+                    <div>
+                        <Button
+                            onClick={onPlay}
+                            className="opacity-0 group-hover:opacity-100 transition"
+                            size="icon"
+                            variant="ghost">
+                            <Speech className="w-4 h-4" />
+                        </Button>
+                    </div>
+                </div>
             )}
         </div>
     )
